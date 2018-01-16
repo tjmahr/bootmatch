@@ -39,7 +39,7 @@ constraint.
 I tried four different packages, and they all failed. For some, they couldn't
 handle missing data. Okay, let's remove the rows with missing data. Some didn't
 like how the nominal treatment group was larger than the control group. Fine,
-let's switch the labels. Some provided matches, but did provide the
+let's switch the labels. Some provided matches, but did not provide the
 matches in pairs. (Thus, one group was larger than the other.) Some failed, I
 think, because some of the participants were unmatchable. No luck at all.
 Perhaps, if I have buckled down and studied the documentation and associated
