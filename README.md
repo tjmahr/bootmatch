@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
-bootmatch: Univariate bootstrap group matching
-==============================================
+bootmatch: Univariate bootstrap group matching [![Travis build status](https://travis-ci.org/tjmahr/bootmatch.svg?branch=master)](https://travis-ci.org/tjmahr/bootmatch)
+=========================================================================================================================================================================
 
 The goal of bootmatch is to ...
 

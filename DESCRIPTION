@@ -1,11 +1,19 @@
 Package: bootmatch
 Version: 0.0.0.9000
-Title: Univariate Bootstrap Group Matching
-Description: What the package does (one paragraph).
+Title: Bootstrap Group Matching
+Description: Generate matchings between two groups on a covariate using bootstrapping.
 Authors@R: person("Tristan", "Mahr", , "tristan.mahr@gmail.com", c("aut", "cre"))
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
 ByteCompile: true
-Suggests: 
+Suggests:
     testthat
+RoxygenNote: 6.0.1.9000
+Imports: 
+    magrittr,
+    dplyr,
+    rlang (>= 0.1.2),
+    tibble,
+    glue,
+    stats
