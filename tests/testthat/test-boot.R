@@ -12,7 +12,7 @@ test_data <- data.frame(
   x,
   stringsAsFactors = FALSE)
 
-test_that("Only two unique group values are accepted", {
+test_that("only two unique group values are accepted", {
   test_data %>% validate_grouping(group2) %>% expect_true()
   test_data %>% validate_grouping(group2_fct) %>% expect_true()
 
@@ -23,7 +23,7 @@ test_that("Only two unique group values are accepted", {
                "Groupings should yield two values")
 })
 
-test_that("Logical statements can define groups", {
+test_that("logical statements can define groups", {
   test_data %>% validate_grouping(group2 == "a") %>% expect_true()
   test_data %>% validate_grouping(group3 == "a") %>% expect_true()
   test_data %>% validate_grouping(group2_fct == "a") %>% expect_true()

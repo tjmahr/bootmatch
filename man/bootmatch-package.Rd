@@ -4,9 +4,9 @@
 \name{bootmatch-package}
 \alias{bootmatch}
 \alias{bootmatch-package}
-\title{bootmatch: Univariate Bootstrap Group Matching}
+\title{bootmatch: Bootstrap Group Matching}
 \description{
-What the package does (one paragraph).
+Generate matchings between two groups on a covariate using bootstrapping.
 }
 \author{
 \strong{Maintainer}: Tristan Mahr \email{tristan.mahr@gmail.com}
