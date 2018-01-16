@@ -1,0 +1,11 @@
+Package: bootmatch
+Version: 0.0.0.9000
+Title: Univariate Bootstrap Group Matching
+Description: What the package does (one paragraph).
+Authors@R: person("Tristan", "Mahr", , "tristan.mahr@gmail.com", c("aut", "cre"))
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+ByteCompile: true
+Suggests: 
+    testthat
