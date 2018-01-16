@@ -18,7 +18,7 @@ knitr::opts_chunk$set(
 
 ## Installation
 
-You can install bootmatch from github with:
+You can install bootmatch from Github with:
 
 ```{r gh-installation, eval = FALSE}
 # install.packages("devtools")
@@ -29,9 +29,8 @@ devtools::install_github("tjmahr/bootmatch")
 
 One day, I tried to match two groups of participants on a single measurement
 variable (age, in months). I wanted participants matched into pairs 
-(*A*<sub>_i_</sub>,*B*<sub>_i_</sub>), and I wanted the pairs to not differ in 
-age by more than 2 months, 
-|Age(_A_<sub>_i_</sub>) − Age(_B_<sub>_i_</sub>)| ≤ 2. This kind of constraint 
+(*a*,*b*), and I wanted the pairs to not differ in 
+age by more than 2 months, |Age(_a_) − Age(_b_)| ≤ 2. This kind of constraint 
 is [called a _caliper_][caliper] in the matching software literature. (When the
 caliper is 0, then exact matching is performed). I wanted the computer to give
 me a matching with as many pairs as possible that obeyed this caliper
@@ -51,18 +50,95 @@ collaborators.
 I threw my hands in the air, and I decided to code my own algorithm for
 matching.
 
-## Example
+### Bootstrap Based Matching
 
-<!-- Here's the idea: -->
+Here is the basic algorithm for a single random matching:
 
-<!-- * Given some a dataframe `data`, a grouping expression `y`, a matching covariate `x`, and an optional caliper constraint -->
+1.  Generate all legal pairings (*a*,*b*) that satisfy the caliper constraint.
+2.  Randomly select one of the pairings, say
+    (*a*<sub>*i*</sub>,*b*<sub>*j*</sub>), to keep. All other pairings with
+    *a*<sub>*i*</sub> or *b*<sub>*j*</sub> are no longer legal.
+3.  Repeat last two steps until no legal pairings remain.
 
-This is a basic example which shows you how to solve a common problem:
+The bootstrap matching repeats this process many times producing many sets of
+matches. Of these potential matches, we select:
 
-```{r example}
-## basic example code
+* The matching with the largest number of matched pairs.
+* Then break ties by selecting the matching where the _z_-score difference in
+  the matching measure (e.g., _age_) between the two groups is the smallest 
+  in size.
+* Then break remaining ties by selecting the first among the biggest-_n_,
+  smallest-_z_ matches.
+
+## A Small Example
+
+Here are two groups of 5 each. 
+
+```{r}
+df <- tibble::data_frame(
+  Group = c(rep("Treatment", 5), rep("Control", 5)) ,
+  ID = c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j"),
+  Age = c(10, 12, 11, 12, NA, 9, 12, 13, 14, 11)
+)
+df
 ```
 
+Some facts about the data here:
+
+  - 2 pairs that can be exactly matched.
+  - 3 members of the `Treatment` group can be matched to 2 members of the
+    `Control` group
+  - 1 of the `Age` values is missing.
+
+
+## Exact matching
+
+`boot_match_univariate()` will match two groups on a single variable. By 
+setting `caliper` to 0, it will return exact matches.
+
+```{r}
+library(bootmatch)
+# for reproducibility
+set.seed(20180116)
+
+boot_match_univariate(df, Group, Age, caliper = 0, boot = 10)
+```
+
+The original dataframe is returned with two additional columns. `Matching` is
+the matching status for that row. The possible values are:
+
+* `matched` - this row was matched to a member in the other group.
+* `unmatched` - this row _could_ have been matched to a member of the other. 
+  group, but its potential matches were matched up to other rows.
+* `unmatchable` - this row cannot be matched to any row in the other group.
+* `missing-data` - this row has missing data on the matching measure
+
+The other returned column `Matching_MatchID` has the ID of that row's match. By
+default, the ID is the row number. For example, `"c"` is matched to row 10 which
+is `"j"`.
+
+For convenience, we can provide the name of a column with ID's that will be used
+instead of row numbers.
+
+```{r}
+set.seed(20180116)
+boot_match_univariate(df, Group, Age, caliper = 0, boot = 10, id = ID)
+```
+
+### Caliper matching
+
+Let's look at the data again.
+
+```{r}
+df
+```
+
+If we allow a little wiggle room, say +/- 1 month, then we can match 4
+members of the `Control` group. Setting the `caliper` to 1 will do this.
+
+```{r}
+boot_match_univariate(df, Group, Age, caliper = 1, boot = 10, id = ID)
+```
 
 [caliper]: https://rdrr.io/cran/optmatch/man/caliper-methods.html
   "optmatch::caliper() documentation"

@@ -1,31 +1,28 @@
-#' @keywords internal
-"_PACKAGE"
 
-# y <- c(rep("a", 30), rep("b", 60))
-# x <- c(round(rnorm(30, 20, 4)), round(rnorm(60, 22, 3)))
-# data <- data.frame(y, x, stringsAsFactors = FALSE)
-# y <- rlang::quo(y)
-# x <- rlang::quo(x)
-
-bootstrap_match <- function(matchable) {
-  done <- dplyr::slice(matchable, 0L)
-  while (nrow(matchable) > 0L) {
-    next_match <- dplyr::sample_n(matchable, 1L)
-    matchable <- matchable[matchable$control != next_match$control &
-                           matchable$treated != next_match$treated, ]
-    done <- dplyr::bind_rows(done, next_match)
-  }
-  done
-}
-
-prepare_data <- function(data, y, x, caliper = 0) {
+#' Match two groups on a single variable using bootstrapping
+#'
+#' @param data a dataframe
+#' @param y a column in `data` with two values or a logical expression that can
+#' be evaluated inside of `data` to determine groups.
+#' @param x a column in `data`
+#' @param caliper a caliper constraint to set on the matching. Only matches with
+#'   `abs(x[1] - x[2]) <= caliper` are legal. A caliper of 0 would enforce exact
+#'   matches.
+#' @param boot number of bootstrap samples to take. Defaults to 100.
+#' @param id an optional column in `data` with a unique ID for each row in
+#' `data`. Matches will be provided using these IDs instead of row numbers.
+#' @return the best bootstrapped match. The best match has the largest number of
+#'   matched pairs and the smallest _z_-score difference on `x` between the two
+#'   matched subgroups.
+#' @export
+boot_match_univariate <- function(data, y, x, caliper = 0, boot = 100, id = NULL) {
   y <- enquo(y)
   x <- enquo(x)
-
-  # x_name <- data %>% dplyr::select(!! x) %>% names()
+  id <- enquo(id)
   x_name <- quo_name(x)
+  x_missing <- is.na(eval_tidy(x, data))
 
-  if (validate_grouping(data, y)) {
+  if (validate_grouping(data, !! y)) {
     y_vals <- eval_tidy(y, data)
     # If y is a character vector,
     # treat it as a factor for the purposes of numbering groups
@@ -36,85 +33,87 @@ prepare_data <- function(data, y, x, caliper = 0) {
 
   data <- tibble::rowid_to_column(data, ".rowid")
 
-  matching_df <- data %>%
+  df_matching <- data %>%
+    dplyr::filter(!is.na(!! x)) %>%
     dplyr::mutate(.group = as.numeric(!! y)) %>%
-    dplyr::select(.data$.rowid, .data$.group, !! x) %>%
-    stats::na.omit()
-
-  # Clean up some metadata attached by na.omit
-  attr(matching_df, "na.action") <- NULL
-  matching_df <- tibble::as_tibble(matching_df)
-
+    dplyr::select(.data$.rowid, .data$.group, !! x)
 
   # Keep only participants within +- caliper values of each other
+  df_template <- find_caliper_pairs(df_matching, .data$.group, !! x, caliper)
 
-  boundaries <- matching_df %>%
-    dplyr::group_by(.data$.group) %>%
-    dplyr::summarise(GroupMin = min(!! x), GroupMax = max(!! x))
+  matchable_rows <- unique(c(df_template$.rowid1, df_template$.rowid2))
+  df_unmatchable <- df_matching[!c(df_matching$.rowid %in% matchable_rows), ]
 
-  lower_edge <- max(boundaries$GroupMin) - caliper
-  upper_edge <- min(boundaries$GroupMax) + caliper
+  # Do a bunch of matches
+  tries <- purrr::rerun(boot, bootstrap_match(df_template))
 
-  trimmed_df <- matching_df %>%
-    dplyr::filter(dplyr::between(!! x, lower_edge, upper_edge))
+  # Keep biggest N's
+  best_n <- max(purrr::map_int(tries, nrow))
+  best_tries <- tries %>%
+    purrr::keep(~ nrow(.x) == best_n)
 
+  # The balance function later on wants a formula
+  f <- rlang::new_formula(quote(.group), rlang::get_expr(x))
 
-  # group_1 %>%
-  #   dplyr::mutate(possible = rep(list(group_2), nrow(group_1)))
-  #
-  #
-  # # Keep only pairs within a caliper distance
-  # f <- rlang::new_formula(quote(.group), rlang::get_expr(x))
-  # ccc <- optmatch::match_on(f, data = trimmed_df, method = "euclidean",
-  #                           caliper = caliper_val)
-  #
-  # template <- reshape2::melt(as.matrix(ccc)) %>%
-  #   filter(is.finite(value)) %>%
-  #   as_tibble()
-  #
-  # # Do a bunch of matches
-  # tries <- purrr::rerun(boot, bootstrap_match(template))
-  #
-  # # Keep biggest N's
-  # best_n <- max(map_int(tries, nrow))
-  # best_tries <- tries %>%
-  #   purrr::keep(~ nrow(.x) == best_n)
-  #
-  # # Keep smallest z's
-  # best_match <- best_tries %>%
-  #   purrr::map(function(try) c(try$control, try$treated)) %>%
-  #   purrr::map(~ trimmed_df[.x, ]) %>%
-  #   purrr::map(~ RItools::xBalance(f, data = .x, report = "z")) %>%
-  #   purrr::map_dbl(purrr::pluck, "results", 1) %>%
-  #   which.min()
-  #
-  # # Figure out matching status
-  # try <- best_tries[[best_match]]
-  # matched_df <- trimmed_df[seq_len(nrow(trimmed_df)) %in%
-  #                            c(try$control, try$treated), ] %>%
-  #   mutate(Matching = "matched")
-  #
-  # unmatchable_df <- matching_df %>%
-  #   anti_join(trimmed_df, by = ".rowid") %>%
-  #   mutate(Matching = "unmatchable")
-  #
-  # unmatched_df <- trimmed_df %>%
-  #   anti_join(matched_df, by = ".rowid") %>%
-  #   mutate(Matching = "unmatched")
-  #
-  # df_results <- bind_rows(matched_df, unmatchable_df, unmatched_df) %>%
-  #   select(.rowid, Matching)
-  #
-  # # Include information about matching process
-  # left_join(data, df_results, by = ".rowid") %>%
-  #   mutate(Matching_Var = rlang::quo_name(x),
-  #          Matching_Outcome = rlang::quo_name(y),
-  #          Matching_Caliper = caliper_val,
-  #          Matching_Floor = lower_edge,
-  #          Matching_Ceiling = upper_edge,
-  #          Matching = ifelse(is.na(Matching), "missing-data", Matching)) %>%
-  #   select(-.rowid)
+  # Keep smallest z's
+  z_scores <- best_tries %>%
+    purrr::map(function(try) c(try$.rowid1, try$.rowid2)) %>%
+    purrr::map(~ df_matching[c(df_matching$.rowid %in% .x), ]) %>%
+    purrr::map(~ RItools::xBalance(f, data = .x, report = "z")) %>%
+    purrr::map_dbl(purrr::pluck, "results", 1)
+
+  best_match <- which.min(abs(z_scores))
+  message("Z-score difference for ", best_n,
+          ngettext(best_n, " pair: ", " pairs: "),
+          round(z_scores[best_match], 3))
+
+  # Figure out matching status
+  df_pairs <- best_tries[[best_match]]
+
+  data[c(df_pairs$.rowid1, df_pairs$.rowid2), "Matching"] <- "matched"
+  data[df_unmatchable$.rowid, "Matching"] <- "unmatchable"
+  data[x_missing, "Matching"] <- "missing-data"
+  data[is.na(data$Matching), "Matching"] <- "unmatched"
+
+  # Attach ID's of matches, defaulting to row numbers if necessary
+  if (rlang::quo_is_null(id)) id <- sym(".rowid")
+  id_vals <- dplyr::pull(data, !! id)
+  stopifnot(length(id_vals) == length(unique(id_vals)))
+
+  df_pairs$.match_id1 <- id_vals[df_pairs$.rowid1]
+  df_pairs$.match_id2 <- id_vals[df_pairs$.rowid2]
+
+  d1 <- df_pairs %>%
+    dplyr::select(
+      .rowid = .data$.rowid1,
+      !! quo_name(id) := .data$.match_id1,
+      Matching_MatchID = .data$.match_id2)
+
+  d2 <- df_pairs %>%
+    dplyr::select(
+      .rowid = .data$.rowid2,
+      !! quo_name(id) := .data$.match_id2,
+      Matching_MatchID = .data$.match_id1)
+
+  join_by <- unique(c(".rowid", quo_name(id)))
+  data %>%
+    dplyr::left_join(dplyr::bind_rows(d1, d2), by = join_by) %>%
+    dplyr::select(-.data$.rowid) %>%
+    dplyr::select(dplyr::everything(),
+                  dplyr::one_of(c("Matching", "Matching_MatchID")))
 }
+
+bootstrap_match <- function(matchable) {
+  done <- dplyr::slice(matchable, 0L)
+  while (nrow(matchable) > 0L) {
+    next_match <- dplyr::sample_n(matchable, 1L)
+    matchable <- matchable[matchable$.rowid1 != next_match$.rowid1 &
+                             matchable$.rowid2 != next_match$.rowid2, ]
+    done <- dplyr::bind_rows(done, next_match)
+  }
+  done
+}
+
 
 find_caliper_pairs <- function(data, group, x, caliper = 0) {
   x <- enquo(x)

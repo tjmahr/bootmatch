@@ -16,4 +16,7 @@ Imports:
     rlang (>= 0.1.2),
     tibble,
     glue,
-    stats
+    stats,
+    purrr,
+    RItools
+Roxygen: list(markdown = TRUE)
